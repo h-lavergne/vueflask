@@ -1,0 +1,71 @@
+version: '3'
+
+services:
+
+  traefik:
+    image: traefik:v2.2
+    container_name: traefik
+    command:
+      - --api.insecure=true #remove in prod
+      - --api.dashboard=true #remove in prod
+      - --providers.docker
+      - --providers.docker.exposedByDefault=false
+      - --entryPoints.web.address=:80
+    ports:
+    - "80:80"
+    - "8080:8080"
+    - "5000:5000"
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.rule=Host(`traefik.$HOST_NAME`)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  vue:
+    build: ./sources/frontend
+    container_name: vue
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.web.rule=Host(`${HOST_NAME}`)
+      - traefik.http.routers.web.entrypoints=web
+    volumes:
+      - ./sources/frontend:/var/www/html:rw
+
+  flask:
+    build: ./sources/backend
+    container_name: flask
+    restart: always
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api.rule=Host(`api.${HOST_NAME}`)
+      - traefik.http.routers.api.entrypoints=web
+    volumes:
+      - ./sources/backend:/usr/src/app:rw
+
+  mysql:
+    image: thecodingmachine/mysql:8.0-v1
+    container_name: mysql
+    command: --sql-mode=""
+    environment:
+      MYSQLD_INI_DEFAULT_AUTHENTICATION_PLUGIN: "mysql_native_password"
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  phpmyadmin: #remove in production!
+    image: phpmyadmin/phpmyadmin
+    container_name: phpmyadmin
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.phpmyadmin.rule=Host(`phpmyadmin.${HOST_NAME}`)
+      - traefik.http.routers.phpmyadmin.entrypoints=web
+    environment:
+      PMA_HOST: "mysql"
+
+volumes:
+  mysql_data:
+    driver: local
